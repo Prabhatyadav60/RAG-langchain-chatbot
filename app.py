@@ -1,85 +1,76 @@
 import os
 import streamlit as st
 from langchain.schema import HumanMessage, AIMessage
-from backend import build_or_load_index, query_faiss_index, get_llm_response
-from streamlit.errors import StreamlitAPIException, StreamlitSecretNotFoundError
 
-# Page setup
-st.set_page_config(page_title="📘 PDF Chat Agent", layout="wide")
+from pdf_qa_backend import (
+    build_or_load_index,
+    query_faiss_index,
+    get_llm_response
+)
 
-# Load API Key from Streamlit secrets or environment variable
-GROQ_API_KEY = None
+# 1. App Setup
+st.set_page_config(page_title="Conversational PDF QA Agent", layout="wide")
+
+# 2. Load API Key from Streamlit secrets
 try:
     GROQ_API_KEY = st.secrets["GROQ"]["API_KEY"]
-except (KeyError, StreamlitAPIException, StreamlitSecretNotFoundError):
-    GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-
-if not GROQ_API_KEY:
-    st.error(
-        "🚫 GROQ API key not found.\n"
-        "• On Streamlit Cloud: go to 'Manage App' → 'Secrets' and add:\n"
-        "  [GROQ]\n  API_KEY = \"your_key_here\"\n"
-        "• Or set the environment variable: GROQ_API_KEY"
-    )
+except KeyError:
+    st.error("🔑 GROQ API key not found in Streamlit secrets. Please add it under [GROQ] API_KEY.")
     st.stop()
 
-# Sidebar
-with st.sidebar:
-    st.markdown("## ⚙️ Settings")
-    uploaded_pdf = st.file_uploader("📄 Upload your PDF", type=["pdf"])
-    show_context = st.checkbox("🔎 Show Retrieved Contexts")
-    if st.button("🧹 Clear Conversation"):
-        st.session_state.pop("chat_history", None)
+# 3. Sidebar: PDF Upload + Debug + Clear
+st.sidebar.header("PDF & Settings")
+uploaded_pdf = st.sidebar.file_uploader("Upload PDF", type=["pdf"])
+show_context = st.sidebar.checkbox("Show Retrieved Contexts")
+if st.sidebar.button("Clear Conversation"):
+    st.session_state.chat_history = []
 
-# Main App
-st.markdown(
-    "<h1 style='text-align: center; color: #4A90E2;'>💬 Conversational PDF Chat Agent</h1>",
-    unsafe_allow_html=True
-)
-st.markdown(
-    "<p style='text-align: center;'>Ask questions from your PDF using LLM and get intelligent responses!</p>",
-    unsafe_allow_html=True
-)
-st.markdown("---")
-
-# Display retrieved contexts
-def display_contexts(contexts):
-    st.markdown("### 🔍 Retrieved Contexts")
-    for i, ctx in enumerate(contexts, 1):
-        st.markdown(
-            f"<div style='background-color:#f0f2f6;padding:10px;border-radius:10px;margin:5px 0;'><strong>Context {i}:</strong> {ctx}</div>",
-            unsafe_allow_html=True
-        )
-
-# Chat interface after upload
+# 4. Only proceed after PDF upload
 if uploaded_pdf:
     os.makedirs("pdfs", exist_ok=True)
     pdf_path = os.path.join("pdfs", uploaded_pdf.name)
     with open(pdf_path, "wb") as f:
         f.write(uploaded_pdf.getbuffer())
 
+    # 5. Load or Build Index (cached per PDF)
     @st.cache_resource
     def load_index(path):
         return build_or_load_index(path)
-
     embedder, texts, index = load_index(pdf_path)
-    st.session_state.setdefault("chat_history", [])
 
-    # Render previous messages
+    # 6. Init chat history
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
+
+    # 7. Display Title & Instructions
+    st.title("💬 Conversational PDF QA Agent")
+    st.markdown("Upload a PDF, ask questions, and get detailed answers with context!")
+
+    # 8. Show Contexts if debug enabled
+    def display_contexts(contexts):
+        st.subheader("🔍 Retrieved Contexts")
+        for i, ctx in enumerate(contexts, 1):
+            st.markdown(f"**Context {i}:** {ctx}")
+
+    # 9. Render chat history
     for msg in st.session_state.chat_history:
         role = "user" if isinstance(msg, HumanMessage) else "assistant"
         with st.chat_message(role):
             st.markdown(msg.content)
 
-    if prompt := st.chat_input("💬 Ask something from the PDF..."):
+    # 10. Chat input
+    if prompt := st.chat_input("Type your question..."):
+        # Display user message immediately
         st.session_state.chat_history.append(HumanMessage(content=prompt))
         with st.chat_message("user"):
             st.markdown(prompt)
 
+        # Retrieve relevant contexts
         contexts = query_faiss_index(prompt, embedder, index, texts)
         if show_context:
             display_contexts(contexts)
 
+        # Get assistant response
         answer = get_llm_response(
             api_key=GROQ_API_KEY,
             query=prompt,
@@ -87,8 +78,10 @@ if uploaded_pdf:
             chat_history=st.session_state.chat_history
         )
 
+        # Append and display assistant message
         st.session_state.chat_history.append(AIMessage(content=answer))
         with st.chat_message("assistant"):
             st.markdown(answer)
+
 else:
-    st.info("📂 Upload a PDF from the sidebar to get started.")
+    st.info("📄 Please upload a PDF file to start the conversation.")
