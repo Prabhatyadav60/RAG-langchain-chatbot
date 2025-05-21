@@ -1,10 +1,27 @@
+# Core dependencies for LangChain RAG chatbot
 langchain
 langchain-community
 langchain_groq
-pypdf
+groq
 faiss-cpu
 sentence-transformers
-groq
+
+# Document processing
+pypdf
+python-docx          # For .docx file support
+python-pptx          # For .pptx file support
+pandas               # For .csv file handling
+
+# Web app & secrets
+streamlit
 python-dotenv
 requests
-streamlit
+
+# PDF export (professional reporting)
+fpdf2                # Enhanced version of FPDF for better formatting and Unicode support
+
+# Optional (if you used old `fpdf`, you can replace it with `fpdf2`)
+# fpdf
+
+# Compatibility
+tqdm                 # Often used in LangChain document loaders or when loading data
