@@ -20,15 +20,9 @@
 
 ## 📁 Structure
 
-.
-├── pycache/
-├── vector_store/ # FAISS index files
-├── .gitignore
-├── README.md
-├── app.py # Streamlit UI + PDF export
-├── backend.py # Index-building & query logic
-├── main.py # Entry point / orchestrator
-└── requirements.txt # Python dependencies
+
+
+![image](https://github.com/user-attachments/assets/f2fb759a-99d7-4e73-abf5-127e449d6a93)
 
 
 
