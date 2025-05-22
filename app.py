@@ -17,10 +17,32 @@ try:
 except ImportError:
     pptx = None
 
-# Page setup
+# ——— Custom PDF class for professional styling ———
+class ReportPDF(FPDF):
+    def header(self):
+        # Title
+        self.set_font('Arial', 'B', 16)
+        self.cell(0, 10, 'Chat Conversation Report', ln=True, align='C')
+        # Date
+        self.set_font('Arial', '', 10)
+        self.cell(0, 8, datetime.now().strftime('%B %d, %Y %H:%M'), ln=True, align='C')
+        self.ln(5)
+        # Separator line
+        self.set_draw_color(50, 50, 50)
+        self.set_line_width(0.5)
+        self.line(self.l_margin, self.get_y(), self.w - self.r_margin, self.get_y())
+        self.ln(5)
+
+    def footer(self):
+        self.set_y(-15)
+        self.set_font('Arial', 'I', 8)
+        self.set_text_color(100)
+        self.cell(0, 10, f'Page {self.page_no()}', align='C')
+
+# ——— Streamlit setup ———
 st.set_page_config(page_title="📘 Document Chat Agent", layout="wide")
 
-# Load API Key
+# Load GROQ API key
 try:
     GROQ_API_KEY = st.secrets["GROQ"]["API_KEY"]
 except KeyError:
@@ -38,69 +60,81 @@ with st.sidebar:
     if st.button("🧹 Clear Conversation"):
         st.session_state.pop("chat_history", None)
 
-    if st.button("🖨️ Download as PDF") and "chat_history" in st.session_state:
-        pdf = FPDF()
-        pdf.add_page()
+    if st.button("🖨️ Download Conversation as PDF") and "chat_history" in st.session_state:
+        pdf = ReportPDF()
         pdf.set_auto_page_break(auto=True, margin=15)
-        pdf.set_font("Arial", size=12)
+        pdf.add_page()
+        pdf.set_font("Arial", "", 12)
 
-        pdf.set_fill_color(230, 230, 250)  # light lavender for header
-        pdf.cell(0, 10, "Chat Transcript", ln=True, align="C", fill=True)
-        pdf.ln(4)
+        # Table header
+        ROLE_W = 40
+        MSG_W = pdf.w - pdf.l_margin - pdf.r_margin - ROLE_W
+        pdf.set_fill_color(200, 200, 200)
+        pdf.set_text_color(0)
+        pdf.set_font("Arial", "B", 12)
+        pdf.cell(ROLE_W, 10, "Role", border=1, fill=True, align="C")
+        pdf.cell(MSG_W, 10, "Message", border=1, fill=True, align="C", ln=True)
 
+        # Conversation rows
+        fill = False
         for msg in st.session_state.chat_history:
             role = "User" if isinstance(msg, HumanMessage) else "Assistant"
-            content = msg.content.replace("\n", " ")
-
-            pdf.set_font("Arial", "B", 12)
-            pdf.cell(0, 10, f"{role}:", ln=True)
+            text = msg.content.replace("\n", " ")
+            lines = wrap(text, width=int(MSG_W / 2))  # ~2 chars per mm
 
             pdf.set_font("Arial", "", 12)
-            for line in wrap(content, width=100):
-                pdf.multi_cell(0, 10, line)
-            pdf.ln(2)
+            pdf.set_text_color(0)
+            pdf.set_fill_color(245, 245, 245 if fill else 255)
 
-        # handle both bytearray and str output
-        raw = pdf.output(dest='S')
-        if isinstance(raw, bytearray):
-            pdf_bytes = bytes(raw)
-        else:
-            pdf_bytes = raw.encode('latin-1')
+            # Role cell
+            pdf.cell(ROLE_W, 10, role, border=1, fill=fill)
+            # Message cells
+            for i, line in enumerate(lines):
+                if i == 0:
+                    pdf.multi_cell(MSG_W, 10, line, border=1, fill=fill)
+                else:
+                    pdf.cell(ROLE_W, 10, "", border=0)
+                    pdf.multi_cell(MSG_W, 10, line, border=1, fill=fill)
+            fill = not fill
 
+        # Output PDF
+        raw = pdf.output(dest="S")
+        pdf_bytes = bytes(raw) if isinstance(raw, bytearray) else raw.encode("latin-1")
         buf = io.BytesIO(pdf_bytes)
+
         st.download_button(
-            label="📥 Download Chat as PDF",
+            label="📥 Download Chat Report",
             data=buf,
-            file_name="chat_history.pdf",
+            file_name="chat_conversation_report.pdf",
             mime="application/pdf"
         )
 
-# Main App Title
+# Main UI
 st.markdown(
     "<h1 style='text-align:center;color:#4A90E2;'>💬 Conversational Document Chat Agent</h1>",
     unsafe_allow_html=True
 )
 st.markdown(
-    "<p style='text-align:center;'>Upload documents and chat with their contents via an LLM-powered RAG pipeline.</p>",
+    "<p style='text-align:center;'>Upload a document and chat with its contents via a RAG pipeline.</p>",
     unsafe_allow_html=True
 )
 st.markdown("---")
 
 # Text extraction helper
 def extract_text(path, ftype):
-    if ftype == 'txt':
-        return open(path, 'r', encoding='utf-8').read()
-    if ftype == 'csv':
+    if ftype == "txt":
+        return open(path, "r", encoding="utf-8").read()
+    if ftype == "csv":
         return pd.read_csv(path).to_string()
-    if ftype == 'docx' and docx:
+    if ftype == "docx" and docx:
         doc = docx.Document(path)
-        return '\n'.join(p.text for p in doc.paragraphs)
-    if ftype == 'pptx' and pptx:
+        return "\n".join(p.text for p in doc.paragraphs)
+    if ftype == "pptx" and pptx:
         prs = pptx.Presentation(path)
-        return '\n'.join(
-            shape.text for slide in prs.slides for shape in slide.shapes if hasattr(shape, 'text')
+        return "\n".join(
+            shape.text for slide in prs.slides for shape in slide.shapes if hasattr(shape, "text")
         )
-    return None
+    return ""
 
 # Display retrieved contexts
 def display_contexts(ctxs):
@@ -112,44 +146,40 @@ def display_contexts(ctxs):
             unsafe_allow_html=True
         )
 
-# Main upload and chat logic
+# Main logic
 if uploaded_file:
-    os.makedirs('docs', exist_ok=True)
-    path = os.path.join('docs', uploaded_file.name)
-    with open(path, 'wb') as f:
+    os.makedirs("docs", exist_ok=True)
+    save_path = os.path.join("docs", uploaded_file.name)
+    with open(save_path, "wb") as f:
         f.write(uploaded_file.getbuffer())
+    ext = uploaded_file.name.rsplit(".", 1)[1].lower()
 
-    # determine extension
-    ext = uploaded_file.name.rsplit('.', 1)[1].lower()
-
-    # build or load index via your backend
     @st.cache_resource
     def load_index(p):
         return build_or_load_index(p)
 
-    # for non-PDFs, extract text to a .txt first
-    if ext in ['txt', 'csv', 'docx', 'pptx']:
-        raw = extract_text(path, ext)
-        txt_path = os.path.splitext(path)[0] + '.txt'
-        with open(txt_path, 'w', encoding='utf-8') as tf:
+    if ext in ["txt", "csv", "docx", "pptx"]:
+        raw = extract_text(save_path, ext)
+        txt_path = os.path.splitext(save_path)[0] + ".txt"
+        with open(txt_path, "w", encoding="utf-8") as tf:
             tf.write(raw)
         index_path = txt_path
     else:
-        index_path = path
+        index_path = save_path
 
     embedder, texts, index = load_index(index_path)
-    st.session_state.setdefault('chat_history', [])
+    st.session_state.setdefault("chat_history", [])
 
-    # replay previous messages
+    # Replay history
     for m in st.session_state.chat_history:
-        role = 'user' if isinstance(m, HumanMessage) else 'assistant'
+        role = "user" if isinstance(m, HumanMessage) else "assistant"
         with st.chat_message(role):
             st.markdown(m.content)
 
-    # new user query
-    if q := st.chat_input('💬 Ask something...'):
+    # New query
+    if q := st.chat_input("💬 Ask something..."):
         st.session_state.chat_history.append(HumanMessage(content=q))
-        with st.chat_message('user'):
+        with st.chat_message("user"):
             st.markdown(q)
 
         ctxs = query_faiss_index(q, embedder, index, texts)
@@ -163,7 +193,7 @@ if uploaded_file:
             chat_history=st.session_state.chat_history
         )
         st.session_state.chat_history.append(AIMessage(content=resp))
-        with st.chat_message('assistant'):
+        with st.chat_message("assistant"):
             st.markdown(resp)
 else:
-    st.info('📂 Upload a document to begin.')
+    st.info("📂 Upload a document to begin.")
