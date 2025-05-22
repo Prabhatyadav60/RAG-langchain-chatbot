@@ -56,8 +56,8 @@ except KeyError:
 with st.sidebar:
     st.markdown("## ⚙️ Settings")
     uploaded_file = st.file_uploader(
-        "📄 Upload your document (PDF, TXT, DOCX, PPTX, CSV)",
-        type=["pdf", "txt", "docx", "pptx", "csv"]
+        "📄 Upload your document (PDF)",
+        type=["pdf"]
     )
     show_context = st.checkbox("🔎 Show Retrieved Contexts")
     if st.button("🧹 Clear Conversation"):
