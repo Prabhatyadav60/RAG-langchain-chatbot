@@ -20,20 +20,15 @@
 
 ## 📁 Structure
 
-Langchain-RAG-chatbot/
-│
-├── backend/
-│ ├── embedder.py # build embeddings & FAISS index
-│ ├── indexer.py # index loading & saving
-│ └── llm_response.py # RAG orchestration & LLM calls
-│
-├── streamlit_app/
-│ ├── app.py # main Streamlit UI + PDF export
-│ └── utils.py # text-extraction helpers
-│
-├── docs/ # auto-generated uploads & temp files
-├── requirements.txt # Python dependencies
-└── README.md # this file
+.
+├── pycache/
+├── vector_store/ # FAISS index files
+├── .gitignore
+├── README.md
+├── app.py # Streamlit UI + PDF export
+├── backend.py # Index-building & query logic
+├── main.py # Entry point / orchestrator
+└── requirements.txt # Python dependencies
 
 
 
