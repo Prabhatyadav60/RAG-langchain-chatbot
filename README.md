@@ -1,7 +1,7 @@
 # 💬 LangChain RAG-based Conversational Document Chatbot
 
 > **User:** What is this project about?  
-> **Assistant:** It’s a Retrieval-Augmented Generation chatbot built with LangChain, FAISS, and a hosted LLM (GROQ or OpenAI). You upload documents (PDF, TXT, DOCX, PPTX, CSV), and it retrieves relevant chunks to answer your questions—right inside a Streamlit app.
+> **Assistant:** It’s a Retrieval-Augmented Generation chatbot built with LangChain, FAISS, and a hosted LLM (GROQ or OpenAI). You upload documents (PDF), and it retrieves relevant chunks to answer your questions—right inside a Streamlit app.
 
 ---
 
