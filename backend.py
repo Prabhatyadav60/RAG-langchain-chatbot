@@ -114,10 +114,11 @@ def get_llm_response(api_key: str, query: str, contexts: list[str], chat_history
 
     llm = ChatGroq(model_name="llama3-8b-8192", api_key=api_key)
     system_msg = SystemMessage(
-        content=(
+       content=(
             "You are a helpful assistant. "
             "Use provided context if relevant and format answers in Markdown. "
-            "Maintain conversational context."
+            "Maintain conversational context and dont put asterstik in your answer." 
+        
         )
     )
     messages = [system_msg]
