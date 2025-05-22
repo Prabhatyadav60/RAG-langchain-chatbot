@@ -1,14 +1,13 @@
 import os
 import io
+import time
 from textwrap import wrap
 import streamlit as st
 import pandas as pd
-from datetime import datetime
 from fpdf import FPDF
 from langchain.schema import HumanMessage, AIMessage
 from backend import build_or_load_index, query_faiss_index, get_llm_response
 
-# Optional imports
 try:
     import docx
 except ImportError:
@@ -18,13 +17,15 @@ try:
 except ImportError:
     pptx = None
 
-# ——— Simple PDF class ———
+# ——— Simple PDF class with time module for header ———
 class SimplePDF(FPDF):
     def header(self):
         self.set_font("Arial", "B", 16)
         self.cell(0, 10, "Chat Conversation Report", ln=True, align="C")
+        # Use time.strftime for a consistent local timestamp
+        timestamp = time.strftime("%B %d, %Y %H:%M:%S", time.localtime())
         self.set_font("Arial", "", 10)
-        self.cell(0, 8, datetime.now().strftime("%B %d, %Y %H:%M"), ln=True, align="C")
+        self.cell(0, 8, timestamp, ln=True, align="C")
         self.ln(5)
 
     def footer(self):
@@ -38,18 +39,14 @@ def make_pdf_bytes(chat_history):
     pdf.add_page()
     pdf.set_font("Arial", "", 12)
 
-    # For each message, print Role + wrapped text
     for msg in chat_history:
         role = "User" if isinstance(msg, HumanMessage) else "Assistant"
         text = msg.content.strip().replace("\n", " ")
-        # Header
         pdf.set_font("Arial", "B", 12)
         pdf.cell(0, 8, f"{role}:", ln=True)
-        # Body
         pdf.set_font("Arial", "", 12)
-        # Wrap at ~90 characters
         for line in wrap(text, width=90):
-            pdf.cell(5)  # small indent
+            pdf.cell(5)  # indent
             pdf.cell(0, 8, line, ln=True)
         pdf.ln(2)
 
@@ -74,10 +71,10 @@ show_context = st.sidebar.checkbox("🔎 Show Retrieved Contexts")
 if st.sidebar.button("🧹 Clear Conversation"):
     st.session_state.pop("chat_history", None)
 
-st.markdown("<h1 style='text-align:center;'>💬 Document Chat Agent</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align:center;'>💬 Document Chat Agent</h1>",
+            unsafe_allow_html=True)
 st.markdown("---")
 
-# helpers
 def extract_text(path, ftype):
     if ftype == "txt":
         return open(path, "r", encoding="utf-8").read()
@@ -98,11 +95,10 @@ def display_contexts(ctxs):
     for i, c in enumerate(ctxs, 1):
         st.markdown(f"- **Context {i}:** {c}")
 
-# indexing & chat
 if uploaded_file:
     os.makedirs("docs", exist_ok=True)
-    save_path = os.path.join("docs", uploaded_file.name)
-    with open(save_path, "wb") as f:
+    path = os.path.join("docs", uploaded_file.name)
+    with open(path, "wb") as f:
         f.write(uploaded_file.getbuffer())
     ext = uploaded_file.name.rsplit(".", 1)[1].lower()
 
@@ -110,30 +106,30 @@ if uploaded_file:
     def load_idx(p): return build_or_load_index(p)
 
     if ext in ["txt", "csv", "docx", "pptx"]:
-        raw = extract_text(save_path, ext)
-        txt_path = save_path + ".txt"
-        with open(txt_path, "w", encoding="utf-8") as tf: tf.write(raw)
+        raw = extract_text(path, ext)
+        txt_path = path + ".txt"
+        with open(txt_path, "w", encoding="utf-8") as tf:
+            tf.write(raw)
         idx_path = txt_path
     else:
-        idx_path = save_path
+        idx_path = path
 
     embedder, texts, index = load_idx(idx_path)
     st.session_state.setdefault("chat_history", [])
 
-    # replay
     for m in st.session_state.chat_history:
         role = "user" if isinstance(m, HumanMessage) else "assistant"
         with st.chat_message(role):
             st.markdown(m.content)
 
-    # new input
     if q := st.chat_input("💬 Ask something..."):
         st.session_state.chat_history.append(HumanMessage(content=q))
         with st.chat_message("user"):
             st.markdown(q)
 
         ctxs = query_faiss_index(q, embedder, index, texts)
-        if show_context: display_contexts(ctxs)
+        if show_context:
+            display_contexts(ctxs)
 
         resp = get_llm_response(
             api_key=GROQ_API_KEY,
@@ -145,7 +141,6 @@ if uploaded_file:
         with st.chat_message("assistant"):
             st.markdown(resp)
 
-    # download button
     if st.session_state.chat_history:
         pdf_bytes = make_pdf_bytes(st.session_state.chat_history)
         st.sidebar.download_button(
