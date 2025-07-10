@@ -9,22 +9,14 @@ from sentence_transformers import SentenceTransformer
 from langchain_groq import ChatGroq
 from langchain.schema import SystemMessage, HumanMessage
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Configuration
-# ─────────────────────────────────────────────────────────────────────────────
-
 load_dotenv()
 VECTOR_DIR = "vector_store"
 EMBED_MODEL = "all-MiniLM-L6-v2"
-FAISS_METRIC = faiss.METRIC_INNER_PRODUCT  # cosine after normalize
+FAISS_METRIC = faiss.METRIC_INNER_PRODUCT  
 
-# Ensure base vector directory exists
 def _ensure_dir(path):
     os.makedirs(os.path.dirname(path), exist_ok=True)
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 1. PDF Loading & Chunking
-# ─────────────────────────────────────────────────────────────────────────────
 
 def load_pdf_and_chunks(pdf_path: str, chunk_size: int = 500, chunk_overlap: int = 50) -> list[str]:
     """
@@ -46,9 +38,7 @@ def load_pdf_and_chunks(pdf_path: str, chunk_size: int = 500, chunk_overlap: int
     docs = splitter.split_documents(pages)
     return [doc.page_content for doc in docs]
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 2. Build or Load FAISS Index (per-PDF)
-# ─────────────────────────────────────────────────────────────────────────────
+
 
 def build_or_load_index(pdf_path: str) -> tuple[SentenceTransformer, list[str], faiss.Index]:
     """
@@ -61,7 +51,7 @@ def build_or_load_index(pdf_path: str) -> tuple[SentenceTransformer, list[str], 
     _ensure_dir(emb_path)
     _ensure_dir(idx_path)
 
-    # Try loading existing
+
     if os.path.exists(emb_path) and os.path.exists(idx_path):
         try:
             embeddings = np.load(emb_path)
@@ -72,10 +62,9 @@ def build_or_load_index(pdf_path: str) -> tuple[SentenceTransformer, list[str], 
         except Exception:
             pass  # fallback to rebuild
 
-    # Build from scratch
     texts = load_pdf_and_chunks(pdf_path)
     if not texts:
-        # return empty index dimension 1
+  
         embedder = SentenceTransformer(EMBED_MODEL)
         empty_index = faiss.IndexFlat(1, FAISS_METRIC)
         return embedder, [], empty_index
@@ -91,9 +80,7 @@ def build_or_load_index(pdf_path: str) -> tuple[SentenceTransformer, list[str], 
     faiss.write_index(index, idx_path)
     return embedder, texts, index
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 3. Query the FAISS Index
-# ─────────────────────────────────────────────────────────────────────────────
+
 
 def query_faiss_index(query: str, embedder, index, texts: list[str], k: int = 3) -> list[str]:
     if not texts or index.ntotal == 0:
@@ -103,11 +90,6 @@ def query_faiss_index(query: str, embedder, index, texts: list[str], k: int = 3)
     faiss.normalize_L2(q_emb)
     _, I = index.search(q_emb, k)
     return [texts[i] for i in I[0] if 0 <= i < len(texts)]
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 4. Conversational LLM Invocation with Markdown instruction
-# ─────────────────────────────────────────────────────────────────────────────
-
 def get_llm_response(api_key: str, query: str, contexts: list[str], chat_history: list = None) -> str:
     if not api_key:
         raise ValueError("GROQ API key is required.")
